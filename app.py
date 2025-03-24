@@ -5,8 +5,16 @@ import io
 import base64
 import time
 import os
+import uuid
 from datetime import datetime
 from camera_input_live import camera_input_live
+import json
+import requests
+import hashlib
+# Debug imports
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 from src.utils import encode_image_to_base64, validate_image
 from src.gemini_handler import HandwritingAnalyzer
@@ -22,6 +30,15 @@ from config import (
 
 # Initialize the analyzer
 analyzer = HandwritingAnalyzer()
+
+# Create directory for temp files
+TEMP_FOLDER = "temp"
+os.makedirs(TEMP_FOLDER, exist_ok=True)
+
+# Cloudinary configuration - you would add your actual credentials in Streamlit secrets
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
 
 # Page configuration
 st.set_page_config(
@@ -224,10 +241,29 @@ st.markdown("""
     .camera-icon {
         margin-right: 8px;
     }
+    
+    /* User registration form styling */
+    .user-form {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid #eee;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    /* Submission success message */
+    .submission-success {
+        background-color: #e6f7e6;
+        border-left: 4px solid #28a745;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 4px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Session state to track current state
+# Session state variables
 if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
     
@@ -239,10 +275,140 @@ if "uploaded_file" not in st.session_state:
     
 if "camera_on" not in st.session_state:
     st.session_state.camera_on = False
+    
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
+    
+if "submission_id" not in st.session_state:
+    st.session_state.submission_id = ""
+    
+if "image_url" not in st.session_state:
+    st.session_state.image_url = ""
+    
+if "submitted" not in st.session_state:
+    st.session_state.submitted = False
 
-# Function to toggle camera state
-def toggle_camera():
-    st.session_state.camera_on = not st.session_state.camera_on
+# Function to upload to Cloudinary
+# Function to upload to Cloudinary
+def upload_to_cloudinary(image_data, filename):
+    """Upload image to Cloudinary and return the URL"""
+    if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+        st.warning("Cloudinary credentials not configured. Images will be stored temporarily.")
+        # Save to temp folder as fallback
+        temp_path = os.path.join(TEMP_FOLDER, filename)
+        if isinstance(image_data, bytes):
+            with open(temp_path, "wb") as f:
+                f.write(image_data)
+        else:
+            image_data.seek(0)
+            with open(temp_path, "wb") as f:
+                f.write(image_data.read())
+        return f"Local file: {temp_path}"
+    
+    try:
+        # Prepare for upload
+        upload_url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+        
+        if isinstance(image_data, bytes):
+            # If it's already bytes data
+            base64_data = base64.b64encode(image_data).decode("utf-8")
+        else:
+            # If it's a file-like object
+            image_data.seek(0)
+            base64_data = base64.b64encode(image_data.read()).decode("utf-8")
+        
+        # Create signature for authentication (for signed upload)
+        timestamp = int(time.time())
+        
+        # Prepare parameters
+        params = {
+            "timestamp": timestamp,
+            "public_id": filename.split('.')[0],  # Use filename without extension as public_id
+            "tags": "handwriting_analyzer"
+        }
+        
+        # Create signature
+        signature_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
+        signature_string += CLOUDINARY_API_SECRET  # Add the API secret
+        signature = hashlib.sha1(signature_string.encode()).hexdigest()
+        
+        # Prepare the full request
+        data = {
+            "file": f"data:image/jpeg;base64,{base64_data}",
+            "api_key": CLOUDINARY_API_KEY,
+            "timestamp": timestamp,
+            "signature": signature,
+            "public_id": params["public_id"],
+            "tags": params["tags"]
+        }
+        
+        # Upload to Cloudinary
+        response = requests.post(upload_url, data=data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("secure_url")
+        else:
+            st.error(f"Failed to upload to Cloudinary: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error uploading to Cloudinary: {str(e)}")
+        return None
+
+# Function to save submission data
+def save_submission_data(submission_id, user_name, image_url):
+    """Save submission data to a JSON file that can be accessed by teammates"""
+    submission_data = {
+        "submission_id": submission_id,
+        "user_name": user_name,
+        "image_url": image_url,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "hour_group": datetime.now().strftime("%Y-%m-%d-%H")  # Group by hour for contest
+    }
+    
+    # Save to a local JSON file
+    submissions_file = os.path.join(TEMP_FOLDER, "submissions.json")
+    
+    # Read existing data
+    existing_data = []
+    if os.path.exists(submissions_file):
+        try:
+            with open(submissions_file, "r") as f:
+                existing_data = json.load(f)
+        except:
+            existing_data = []
+    
+    # Append new submission
+    existing_data.append(submission_data)
+    
+    # Write back to file
+    with open(submissions_file, "w") as f:
+        json.dump(existing_data, f, indent=2)
+    
+    return submission_data
+
+# Function to handle image upload and analysis
+def process_handwriting_image(image_data, user_name):
+    # Generate a unique ID for this submission
+    submission_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    st.session_state.submission_id = submission_id
+    
+    # Create a sanitized filename
+    safe_name = "".join(c for c in user_name if c.isalnum() or c in [' ', '_']).replace(' ', '_')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe_name}_{timestamp}_{submission_id}.jpg"
+    
+    # Upload image to cloud storage
+    image_url = upload_to_cloudinary(image_data, filename)
+    st.session_state.image_url = image_url
+    
+    # Save submission data
+    save_submission_data(submission_id, user_name, image_url)
+    
+    # Set submitted flag
+    st.session_state.submitted = True
+    
+    return filename, image_url
 
 # Function to handle image analysis
 def analyze_handwriting_image(image_data):
@@ -285,8 +451,8 @@ with left_col:
         st.markdown("""
         <div style="text-align: center;">
             <div class="step-number">1</div>
-            <div style="font-weight: 500;">Capture</div>
-            <div style="font-size: 0.9rem; color: #666;">Take a photo of your handwriting</div>
+            <div style="font-weight: 500;">Register</div>
+            <div style="font-size: 0.9rem; color: #666;">Enter your name</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -294,8 +460,8 @@ with left_col:
         st.markdown("""
         <div style="text-align: center;">
             <div class="step-number">2</div>
-            <div style="font-weight: 500;">Analyze</div>
-            <div style="font-size: 0.9rem; color: #666;">Our AI examines writing patterns</div>
+            <div style="font-weight: 500;">Capture</div>
+            <div style="font-size: 0.9rem; color: #666;">Take a photo of your handwriting</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -308,108 +474,164 @@ with left_col:
         </div>
         """, unsafe_allow_html=True)
     
-    # Image input section
-    st.subheader("Capture Your Handwriting")
+    # User information form
+    st.subheader("Enter Your Information")
     
-    # Create tabs for capturing or uploading image
-    image_tab1, image_tab2 = st.tabs(["📷 Take a Photo", "📁 Upload Image"])
-    
-    with image_tab1:
-        st.markdown("<div class='input-section'>", unsafe_allow_html=True)
-        st.markdown("""
-        <p style="margin-bottom: 1rem; text-align: center;">
-            <strong>For best results:</strong> Write 3-4 lines on unlined paper with good lighting
-        </p>
-        """, unsafe_allow_html=True)
+    with st.form(key="user_info_form"):
+        st.markdown("<div class='user-form'>", unsafe_allow_html=True)
+        user_name = st.text_input("Your Name *", value=st.session_state.user_name)
+        st.markdown("<p style='font-size: 0.8rem; color: #666;'>* Required field</p>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        # Camera button instead of automatic camera
-        if not st.session_state.camera_on:
+        submit_button = st.form_submit_button(label="Continue")
+        
+        if submit_button:
+            if not user_name:
+                st.error("Please enter your name to continue")
+            else:
+                st.session_state.user_name = user_name
+    
+    # Image input section (only shown after name is provided)
+    if st.session_state.user_name:
+        st.subheader("Capture Your Handwriting")
+        
+        # Create tabs for capturing or uploading image
+        image_tab1, image_tab2 = st.tabs(["📷 Take a Photo", "📁 Upload Image"])
+        
+        with image_tab1:
+            st.markdown("<div class='input-section'>", unsafe_allow_html=True)
             st.markdown("""
-            <div style="text-align: center; margin: 20px 0;">
-                <div class="camera-button" onclick="document.getElementById('camera-button').click()">
-                    <span class="camera-icon">📷</span> Take a Photo of Your Handwriting
-                </div>
-            </div>
+            <p style="margin-bottom: 1rem; text-align: center;">
+                <strong>For best results:</strong> Write 3-4 lines on unlined paper with good lighting
+            </p>
             """, unsafe_allow_html=True)
             
-            # Hidden button to handle the click
-            if st.button("Camera", key="camera-button", help="Turn on camera"):
-                st.session_state.camera_on = True
-                st.experimental_rerun()
-        else:
-            # Camera input only shown when button is clicked
-            img_file_buffer = camera_input_live()
-            
-            if img_file_buffer is not None:
-                # Save the captured image
-                bytes_data = img_file_buffer.getvalue()
-                st.session_state.captured_image = bytes_data
-                st.session_state.uploaded_file = None
-                st.session_state.camera_on = False  # Turn off camera after taking photo
+            # Camera button instead of automatic camera
+            if not st.session_state.camera_on:
+                logger.debug("Camera is off, showing camera button")
+                st.markdown("""
+                <div style="text-align: center; margin: 20px 0;">
+                    <div class="camera-button" onclick="document.getElementById('camera-button').click()">
+                        <span class="camera-icon">📷</span> Take a Photo of Your Handwriting
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Display the captured image
-                image = Image.open(io.BytesIO(bytes_data))
-                st.image(image, caption="Captured Handwriting Sample", use_container_width=True)
-                
-                # Auto-analyze
-                analyze_handwriting_image(io.BytesIO(bytes_data))
-            
-            # Button to cancel camera
-            if st.button("Cancel", key="cancel-camera"):
-                st.session_state.camera_on = False
-                st.experimental_rerun()
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with image_tab2:
-        st.markdown("<div class='input-section'>", unsafe_allow_html=True)
-        
-        uploaded_file = st.file_uploader("Choose an image...", type=SUPPORTED_FORMATS)
-        
-        st.markdown("""
-        <p style="text-align: center;"><strong>For best results:</strong></p>
-        <ul style="margin-left: 2rem;">
-            <li>Write at least 3-4 lines of text</li>
-            <li>Use your natural handwriting style</li>
-            <li>Ensure good lighting</li>
-        </ul>
-        """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        if uploaded_file is not None:
-            # Save the uploaded file
-            st.session_state.uploaded_file = uploaded_file
-            st.session_state.captured_image = None
-            
-            # Validate the image
-            is_valid, error_message = validate_image(uploaded_file, SUPPORTED_FORMATS, MAX_IMAGE_SIZE)
-            
-            if not is_valid:
-                st.error(error_message)
+                # Hidden button to handle the click
+                if st.button("Camera", key="camera-button", help="Turn on camera"):
+                    st.session_state.camera_on = True
+                    st.rerun()
             else:
-                # Display the image
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded Handwriting Sample", use_container_width=True)
+                # Camera input only shown when button is clicked
+                img_file_buffer = camera_input_live()
                 
-                # Auto-analyze
-                uploaded_file.seek(0)
-                analyze_handwriting_image(uploaded_file)
+                if img_file_buffer is not None:
+                    # Save the captured image
+                    bytes_data = img_file_buffer.getvalue()
+                    st.session_state.captured_image = bytes_data
+                    st.session_state.uploaded_file = None
+                    st.session_state.camera_on = False  # Turn off camera after taking photo
+                    
+                    # Process and upload the image
+                    filename, image_url = process_handwriting_image(bytes_data, st.session_state.user_name)
+                    
+                    # Display the captured image
+                    image = Image.open(io.BytesIO(bytes_data))
+                    st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
+                    
+                    # Show submission success message
+                    st.markdown(f"""
+                    <div class="submission-success">
+                        <strong>Submission successful!</strong> Your handwriting has been entered into the contest.
+                        <p>Submission ID: {st.session_state.submission_id}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Auto-analyze
+                    analyze_handwriting_image(io.BytesIO(bytes_data))
+                
+                # Button to cancel camera
+                if st.button("Cancel", key="cancel-camera"):
+                    st.session_state.camera_on = False
+                    st.rerun()
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        with image_tab2:
+            st.markdown("<div class='input-section'>", unsafe_allow_html=True)
+            
+            uploaded_file = st.file_uploader("Choose an image...", type=SUPPORTED_FORMATS)
+            
+            st.markdown("""
+            <p style="text-align: center;"><strong>For best results:</strong></p>
+            <ul style="margin-left: 2rem;">
+                <li>Write at least 3-4 lines of text</li>
+                <li>Use your natural handwriting style</li>
+                <li>Ensure good lighting</li>
+            </ul>
+            """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            if uploaded_file is not None:
+                # Save the uploaded file
+                st.session_state.uploaded_file = uploaded_file
+                st.session_state.captured_image = None
+                
+                # Validate the image
+                is_valid, error_message = validate_image(uploaded_file, SUPPORTED_FORMATS, MAX_IMAGE_SIZE)
+                
+                if not is_valid:
+                    st.error(error_message)
+                else:
+                    # Process and upload the image
+                    filename, image_url = process_handwriting_image(uploaded_file, st.session_state.user_name)
+                    
+                    # Display the image
+                    image = Image.open(uploaded_file)
+                    st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
+                    
+                    # Show submission success message
+                    st.markdown(f"""
+                    <div class="submission-success">
+                        <strong>Submission successful!</strong> Your handwriting has been entered into the contest.
+                        <p>Submission ID: {st.session_state.submission_id}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Auto-analyze
+                    uploaded_file.seek(0)
+                    analyze_handwriting_image(uploaded_file)
 
 with right_col:
+    # Contest info
+    st.subheader("Handwriting Contest")
+    st.markdown("""
+    <div style="background-color: #f0f7ff; padding: 1.2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #4e89ae;">
+        <h4 style="margin-top: 0;">Win Prizes Every Hour!</h4>
+        <p>The best handwriting submission each hour will win a special prize. Enter now for a chance to win!</p>
+        <p><strong>How it works:</strong></p>
+        <ol>
+            <li>Enter your name</li>
+            <li>Submit your handwriting sample</li>
+            <li>Winners announced every hour</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Always show QR code (booth mode always enabled)
     st.subheader("Try on Your Phone")
     
     # Get the URL of the current app
     try:
         # For deployed app
-        app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app/"])[0]
+        app_url = st.query_params.get("url", ["http://localhost:8501"])[0]
     except:
         try:
             # Alternative method for older Streamlit versions
-            app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app/"])[0]
+            app_url = st.experimental_get_query_params().get("url", ["http://localhost:8501"])[0]
         except:
             # Fallback to default
-            app_url = "https://ai-handwriting-analysis-mjh.streamlit.app/"
+            app_url = "http://localhost:8501"
     
     # Create a QR code
     qr_base64 = generate_qr_code(app_url)
@@ -417,10 +639,10 @@ with right_col:
     # Display the QR code
     st.markdown(f"""
     <div class="qr-container">
-        <p class="scan-instruction">Scan to analyze on your phone:</p>
+        <p class="scan-instruction">Scan to enter the contest:</p>
         <img src="data:image/png;base64,{qr_base64}" width="200">
         <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #666;">
-            Take a photo of your handwriting directly from your mobile device
+            Enter your name and upload your handwriting
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -431,9 +653,10 @@ with right_col:
         <h4>Instructions:</h4>
         <ol style="margin-left: 1.5rem;">
             <li>Scan the QR code with your phone</li>
+            <li>Enter your name in the form</li>
             <li>Write something on paper (3-4 lines)</li>
-            <li>Click "Take a Photo" and capture your handwriting</li>
-            <li>Get your personalized analysis instantly!</li>
+            <li>Take a photo of your handwriting</li>
+            <li>Get your analysis and enter the contest!</li>
         </ol>
     </div>
     """, unsafe_allow_html=True)
@@ -573,12 +796,13 @@ if st.session_state.analysis_result is not None:
     st.markdown(f"<p style='font-style: italic; font-size: 0.8rem; color: #999; text-align: center; margin-top: 2rem;'>{analysis_result['disclaimer']}</p>", unsafe_allow_html=True)
     
     # Reset button for trying again
-    if st.button("Analyze Another Sample", use_container_width=True):
+    if st.button("Submit Another Sample", use_container_width=True):
         st.session_state.analysis_result = None
         st.session_state.captured_image = None
         st.session_state.uploaded_file = None
         st.session_state.camera_on = False
-        st.experimental_rerun()
+        st.session_state.submitted = False
+        st.rerun()
         
     st.markdown("</div>", unsafe_allow_html=True)
 
