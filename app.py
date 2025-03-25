@@ -260,6 +260,50 @@ st.markdown("""
         margin: 1rem 0;
         border-radius: 4px;
     }
+ /* Dark mode compatibility */
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-color: #0e1117 !important;
+            color: #fafafa !important;
+        }
+        
+        /* Cards and sections in dark mode */
+        .feature-card, .user-form, .input-section, .result-container {
+            background-color: #262730 !important;
+            border-color: #4e89ae !important;
+        }
+        
+        /* Text colors in dark mode */
+        .explanation, p, li {
+            color: #dddddd !important;
+        }
+        
+        /* Steps in dark mode */
+        .step-description {
+            color: #dddddd !important;
+        }
+        
+        /* QR container in dark mode */
+        .qr-container {
+            background-color: #262730 !important;
+        }
+        
+        /* Contest info box in dark mode */
+        div[style*="background-color: #f0f7ff"] {
+            background-color: #1e2130 !important;
+            color: #dddddd !important;
+        }
+        
+        /* Make headers visible in dark mode */
+        .main-header, h1, h2, h3, h4, h5, h6 {
+            color: #ffffff !important;
+        }
+        
+        /* Make the profession name stand out */
+        .profession-name {
+            color: #5e99be !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
