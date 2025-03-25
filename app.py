@@ -473,10 +473,13 @@ def analyze_handwriting_image(image_data):
 st.markdown("<h1 class='main-header'>AI Handwriting Analyzer</h1>", unsafe_allow_html=True)
 st.markdown("<p class='tagline'>Uncover personality insights hidden in your handwriting</p>", unsafe_allow_html=True)
 
-# Main content - Two columns layout
-left_col, right_col = st.columns([3, 2])
+# Create containers for better content organization
+input_container = st.container()
+results_container = st.container()
+contest_container = st.container()
 
-with left_col:
+# Main content - Input container
+with input_container:
     # Simple steps
     st.subheader("How It Works")
     cols = st.columns(3)
@@ -508,326 +511,376 @@ with left_col:
         </div>
         """, unsafe_allow_html=True)
     
-    # User information form
-    st.subheader("Enter Your Information")
+    # Two columns layout inside input container
+    left_col, right_col = st.columns([3, 2])
     
-    with st.form(key="user_info_form"):
-        # st.markdown("<div class='user-form'>", unsafe_allow_html=True)
-        user_name = st.text_input("Your Name *", value=st.session_state.user_name)
-        st.markdown("<p style='font-size: 0.8rem; color: #666;'>* Required field</p>", unsafe_allow_html=True)
+    with left_col:
+        # User information form
+        st.subheader("Enter Your Information")
         
-        submit_button = st.form_submit_button(label="Continue")
-        
-        if submit_button:
-            if not user_name:
-                st.error("Please enter your name to continue")
-            else:
-                st.session_state.user_name = user_name
-    
-    # Image input section (only shown after name is provided)
-    if st.session_state.user_name:
-        st.subheader("Capture Your Handwriting")
-        
-        # Create tabs for capturing or uploading image
-        image_tab1, image_tab2 = st.tabs(["📷 Take a Photo", "📁 Upload Image"])
-        
-        with image_tab1:
-            st.markdown("<div class='input-section'>", unsafe_allow_html=True)
-            st.markdown("""
-            <p style="margin-bottom: 1rem; text-align: center;">
-                <strong>For best results:</strong> Write 3-4 lines on unlined paper with good lighting
-            </p>
-            """, unsafe_allow_html=True)
+        with st.form(key="user_info_form"):
+            user_name = st.text_input("Your Name *", value=st.session_state.user_name)
+            st.markdown("<p style='font-size: 0.8rem; color: #666;'>* Required field</p>", unsafe_allow_html=True)
             
-            # Camera button instead of automatic camera
-            if not st.session_state.camera_on:
-                logger.debug("Camera is off, showing camera button")
-                if st.button("📷 Take a Photo of Your Handwriting", key="camera-button", use_container_width=True):
-                    logger.debug("Camera button clicked, activating camera")
-                    st.session_state.camera_on = True
-                    st.rerun()
-            else:
-                logger.debug("Camera is on, showing camera input")
-                # Camera input only shown when button is clicked
-                img_file_buffer = st.camera_input("Take a photo of your handwriting")
-                
-                if img_file_buffer is not None:
-                    # Save the captured image
-                    bytes_data = img_file_buffer.getvalue()
-                    st.session_state.captured_image = bytes_data
-                    st.session_state.uploaded_file = None
-                    st.session_state.camera_on = False  # Turn off camera after taking photo
-                    
-                    # Process and upload the image
-                    filename, image_url = process_handwriting_image(bytes_data, st.session_state.user_name)
-                    
-                    # Display the captured image
-                    image = Image.open(io.BytesIO(bytes_data))
-                    st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
-                    
-                    # Show submission success message
-                    st.success(f"Submission successful! Your handwriting has been entered into the contest. Submission ID: {st.session_state.submission_id}")
-                    
-                    # Auto-analyze
-                    analyze_handwriting_image(io.BytesIO(bytes_data))
-                
-                # Button to cancel camera
-                if st.button("Cancel", key="cancel-camera"):
-                    logger.debug("Cancel button clicked, turning camera off")
-                    st.session_state.camera_on = False
-                    st.rerun()
+            submit_button = st.form_submit_button(label="Continue")
             
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        with image_tab2:
-            st.markdown("<div class='input-section'>", unsafe_allow_html=True)
-            
-            uploaded_file = st.file_uploader("Choose an image...", type=SUPPORTED_FORMATS)
-            
-            st.markdown("""
-            <p style="text-align: center;"><strong>For best results:</strong></p>
-            <ul style="margin-left: 2rem;">
-                <li>Write at least 3-4 lines of text</li>
-                <li>Use your natural handwriting style</li>
-                <li>Ensure good lighting</li>
-            </ul>
-            """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            if uploaded_file is not None:
-                # Save the uploaded file
-                st.session_state.uploaded_file = uploaded_file
-                st.session_state.captured_image = None
-                
-                # Validate the image
-                is_valid, error_message = validate_image(uploaded_file, SUPPORTED_FORMATS, MAX_IMAGE_SIZE)
-                
-                if not is_valid:
-                    st.error(error_message)
+            if submit_button:
+                if not user_name:
+                    st.error("Please enter your name to continue")
                 else:
-                    # Process and upload the image
-                    filename, image_url = process_handwriting_image(uploaded_file, st.session_state.user_name)
+                    st.session_state.user_name = user_name
+        
+        # Image input section (only shown after name is provided)
+        if st.session_state.user_name:
+            st.subheader("Capture Your Handwriting")
+            
+            # Create tabs for capturing or uploading image
+            image_tab1, image_tab2 = st.tabs(["📷 Take a Photo", "📁 Upload Image"])
+            
+            with image_tab1:
+                st.markdown("<div class='input-section'>", unsafe_allow_html=True)
+                st.markdown("""
+                <p style="margin-bottom: 1rem; text-align: center;">
+                    <strong>For best results:</strong> Write 3-4 lines on unlined paper with good lighting
+                </p>
+                """, unsafe_allow_html=True)
+                
+                # Camera button instead of automatic camera
+                if not st.session_state.camera_on:
+                    logger.debug("Camera is off, showing camera button")
+                    if st.button("📷 Take a Photo of Your Handwriting", key="camera-button", use_container_width=True):
+                        logger.debug("Camera button clicked, activating camera")
+                        st.session_state.camera_on = True
+                        st.rerun()
+                else:
+                    logger.debug("Camera is on, showing camera input")
+                    # Camera input only shown when button is clicked
+                    img_file_buffer = st.camera_input("Take a photo of your handwriting")
                     
-                    # Display the image
-                    image = Image.open(uploaded_file)
-                    st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
+                    if img_file_buffer is not None:
+                        # Save the captured image
+                        bytes_data = img_file_buffer.getvalue()
+                        st.session_state.captured_image = bytes_data
+                        st.session_state.uploaded_file = None
+                        st.session_state.camera_on = False  # Turn off camera after taking photo
+                        
+                        # Process and upload the image
+                        filename, image_url = process_handwriting_image(bytes_data, st.session_state.user_name)
+                        
+                        # Display the captured image
+                        image = Image.open(io.BytesIO(bytes_data))
+                        st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
+                        
+                        # Show submission success message
+                        st.success(f"Submission successful! Your handwriting has been entered into the contest. Submission ID: {st.session_state.submission_id}")
+                        
+                        # Auto-analyze
+                        analyze_handwriting_image(io.BytesIO(bytes_data))
                     
-                    # Show submission success message
-                    st.markdown(f"""
-                    <div class="submission-success">
-                        <strong>Submission successful!</strong> Your handwriting has been entered into the contest.
-                        <p>Submission ID: {st.session_state.submission_id}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Button to cancel camera
+                    if st.button("Cancel", key="cancel-camera"):
+                        logger.debug("Cancel button clicked, turning camera off")
+                        st.session_state.camera_on = False
+                        st.rerun()
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            with image_tab2:
+                st.markdown("<div class='input-section'>", unsafe_allow_html=True)
+                
+                uploaded_file = st.file_uploader("Choose an image...", type=SUPPORTED_FORMATS)
+                
+                st.markdown("""
+                <p style="text-align: center;"><strong>For best results:</strong></p>
+                <ul style="margin-left: 2rem;">
+                    <li>Write at least 3-4 lines of text</li>
+                    <li>Use your natural handwriting style</li>
+                    <li>Ensure good lighting</li>
+                </ul>
+                """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                if uploaded_file is not None:
+                    # Save the uploaded file
+                    st.session_state.uploaded_file = uploaded_file
+                    st.session_state.captured_image = None
                     
-                    # Auto-analyze
-                    uploaded_file.seek(0)
-                    analyze_handwriting_image(uploaded_file)
+                    # Validate the image
+                    is_valid, error_message = validate_image(uploaded_file, SUPPORTED_FORMATS, MAX_IMAGE_SIZE)
+                    
+                    if not is_valid:
+                        st.error(error_message)
+                    else:
+                        # Process and upload the image
+                        filename, image_url = process_handwriting_image(uploaded_file, st.session_state.user_name)
+                        
+                        # Display the image
+                        image = Image.open(uploaded_file)
+                        st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
+                        
+                        # Show submission success message
+                        st.markdown(f"""
+                        <div class="submission-success">
+                            <strong>Submission successful!</strong> Your handwriting has been entered into the contest.
+                            <p>Submission ID: {st.session_state.submission_id}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Auto-analyze
+                        uploaded_file.seek(0)
+                        analyze_handwriting_image(uploaded_file)
+    
+    with right_col:
+        if not st.session_state.analysis_result:  # Only show in the right column if no results yet
+            # Contest info
+            st.subheader("Handwriting Contest")
+            st.markdown("""
+            <div style="padding: 1.2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #4e89ae;">
+                <h4 style="margin-top: 0;">Win Prizes Every Hour!</h4>
+                <p>The best handwriting submission each hour will win a special prize. Enter now for a chance to win!</p>
+                <p><strong>How it works:</strong></p>
+                <ol>
+                    <li>Enter your name</li>
+                    <li>Submit your handwriting sample</li>
+                    <li>Winners announced every hour</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Always show QR code (booth mode always enabled)
+            st.subheader("Try on Your Phone")
+            
+            # Get the URL of the current app
+            try:
+                # For deployed app
+                app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+            except:
+                try:
+                    # Alternative method for older Streamlit versions
+                    app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+                except:
+                    # Fallback to default
+                    app_url = "https://ai-handwriting-analysis-mjh.streamlit.app"
+            
+            # Create a QR code
+            qr_base64 = generate_qr_code(app_url)
+            
+            # Display the QR code
+            st.markdown(f"""
+            <div class="qr-container">
+                <p class="scan-instruction">Scan to enter the contest:</p>
+                <img src="data:image/png;base64,{qr_base64}" width="200">
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #666;">
+                    Enter your name and upload your handwriting
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Instructions
+            st.markdown("""
+            <div style="margin-top: 1rem;">
+                <h4>Instructions:</h4>
+                <ol style="margin-left: 1.5rem;">
+                    <li>Scan the QR code with your phone</li>
+                    <li>Enter your name in the form</li>
+                    <li>Write something on paper (3-4 lines)</li>
+                    <li>Take a photo of your handwriting</li>
+                    <li>Get your analysis and enter the contest!</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)
 
-with right_col:
-    # Contest info
-    st.subheader("Handwriting Contest")
-    st.markdown("""
-    <div style="padding: 1.2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #4e89ae;">
-        <h4 style="margin-top: 0;">Win Prizes Every Hour!</h4>
-        <p>The best handwriting submission each hour will win a special prize. Enter now for a chance to win!</p>
-        <p><strong>How it works:</strong></p>
-        <ol>
-            <li>Enter your name</li>
-            <li>Submit your handwriting sample</li>
-            <li>Winners announced every hour</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Always show QR code (booth mode always enabled)
-    st.subheader("Try on Your Phone")
-    
-    # Get the URL of the current app
-    try:
-        # For deployed app
-        app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
-    except:
-        try:
-            # Alternative method for older Streamlit versions
-            app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
-        except:
-            # Fallback to default
-            app_url = "https://ai-handwriting-analysis-mjh.streamlit.app"
-    
-    # Create a QR code
-    qr_base64 = generate_qr_code(app_url)
-    
-    # Display the QR code
-    st.markdown(f"""
-    <div class="qr-container">
-        <p class="scan-instruction">Scan to enter the contest:</p>
-        <img src="data:image/png;base64,{qr_base64}" width="200">
-        <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #666;">
-            Enter your name and upload your handwriting
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Instructions
-    st.markdown("""
-    <div style="margin-top: 1rem;">
-        <h4>Instructions:</h4>
-        <ol style="margin-left: 1.5rem;">
-            <li>Scan the QR code with your phone</li>
-            <li>Enter your name in the form</li>
-            <li>Write something on paper (3-4 lines)</li>
-            <li>Take a photo of your handwriting</li>
-            <li>Get your analysis and enter the contest!</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Display results if analysis was performed
-if st.session_state.analysis_result is not None:
-    analysis_result = st.session_state.analysis_result
-    
-    st.markdown("<div class='result-container'>", unsafe_allow_html=True)
-    st.success("Analysis complete!")
-    
-    # Profession prediction headline
-    if "profession" in analysis_result and "primary" in analysis_result["profession"]:
-        st.markdown(f"""
-        <div style="text-align: center; margin: 1rem 0 2rem 0;">
-            <div class="profession-title">Your handwriting suggests you'd make an excellent:</div>
-            <div class="profession-name">{analysis_result['profession']['primary']}</div>
-            <p style="font-style: italic; color: #555; max-width: 600px; margin: 0 auto; text-align: center;">
-                {analysis_result['profession']['explanation']}
+# IMPORTANT: Display results immediately after the input container and before contest info
+with results_container:
+    # Display results if analysis was performed
+    if st.session_state.analysis_result is not None:
+        analysis_result = st.session_state.analysis_result
+        
+        st.markdown("<div class='result-container'>", unsafe_allow_html=True)
+        st.success("Analysis complete!")
+        
+        # Profession prediction headline
+        if "profession" in analysis_result and "primary" in analysis_result["profession"]:
+            st.markdown(f"""
+            <div style="text-align: center; margin: 1rem 0 2rem 0;">
+                <div class="profession-title">Your handwriting suggests you'd make an excellent:</div>
+                <div class="profession-name">{analysis_result['profession']['primary']}</div>
+                <p style="font-style: italic; color: #555; max-width: 600px; margin: 0 auto; text-align: center;">
+                    {analysis_result['profession']['explanation']}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Create tabs for the detailed results
+        tab1, tab2 = st.tabs(["Personality Traits", "Handwriting Features"])
+        
+        # Tab 1: Personality Traits with radar chart
+        with tab1:
+            # Create a radar chart for personality traits
+            trait_names = []
+            trait_scores = []
+            
+            for trait in PERSONALITY_TRAITS:
+                trait_key = trait.lower()
+                if trait_key in analysis_result["traits"]:
+                    trait_data = analysis_result["traits"][trait_key]
+                    trait_names.append(trait)
+                    # Convert score to int if it's a string
+                    if isinstance(trait_data["score"], str):
+                        try:
+                            score = int(trait_data["score"])
+                        except ValueError:
+                            score = float(trait_data["score"])
+                    else:
+                        score = trait_data["score"]
+                    trait_scores.append(score)
+            
+            # Add the first trait again to close the radar chart
+            if trait_names:  # Check if we have any trait names
+                trait_names.append(trait_names[0])
+                trait_scores.append(trait_scores[0])
+            
+            # Create the radar chart
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatterpolar(
+                r=trait_scores,
+                theta=trait_names,
+                fill='toself',
+                name='Personality Profile',
+                line_color='#4e89ae',
+                fillcolor='rgba(78, 137, 174, 0.3)'
+            ))
+            
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 10]
+                    )
+                ),
+                showlegend=False,
+                height=350,
+                margin=dict(l=50, r=50, t=30, b=30)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Personality profile summary
+            st.markdown("<h4>Your Personality Profile</h4>", unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size: 1rem; padding: 1rem; background-color: #f5f7f9; border-radius: 8px; border-left: 3px solid #4e89ae;'>{analysis_result['profile']}</p>", unsafe_allow_html=True)
+            
+            # Display trait scores with progress bars
+            for trait in PERSONALITY_TRAITS:
+                trait_key = trait.lower()
+                if trait_key in analysis_result["traits"]:
+                    trait_data = analysis_result["traits"][trait_key]
+                    
+                    # Convert score to int if it's a string
+                    if isinstance(trait_data["score"], str):
+                        try:
+                            score = int(trait_data["score"])
+                        except ValueError:
+                            score = float(trait_data["score"])
+                    else:
+                        score = trait_data["score"]
+                    
+                    st.markdown(f"**{trait}**: {score}/10")
+                    st.progress(score / 10)
+                    st.markdown(f"<p style='font-size: 0.9rem; color: #666;'>{trait_data['evidence']}</p>", unsafe_allow_html=True)
+                    st.markdown("<hr style='margin: 1rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        
+        # Tab 2: Handwriting Features
+        with tab2:
+            # Use a grid layout for features
+            col1, col2 = st.columns(2)
+            
+            # Split features between columns
+            features = list(HANDWRITING_FEATURES.items())
+            half = len(features) // 2
+            
+            for i, (feature, feature_info) in enumerate(features):
+                feature_key = feature.lower()
+                if feature_key in analysis_result["features"]:
+                    feature_data = analysis_result["features"][feature_key]
+                    
+                    # Add to first or second column based on index
+                    with col1 if i < half else col2:
+                        st.markdown(f"""
+                        <div class='feature-card'>
+                            <strong>{feature}:</strong> {feature_data['value']}
+                            <p style='font-size: 0.9rem; color: #666;'>{feature_data['description']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+        
+        # Sharing section
+        st.markdown("""
+        <div style="margin-top: 2rem; text-align: center;">
+            <h4>📱 Take a screenshot to share your results!</h4>
+            <p style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
+                Share your personality profile with friends or on social media with #AIHandwritingAnalyzer
             </p>
         </div>
         """, unsafe_allow_html=True)
-    
-    # Create tabs for the detailed results
-    tab1, tab2 = st.tabs(["Personality Traits", "Handwriting Features"])
-    
-    # Tab 1: Personality Traits with radar chart
-    with tab1:
-        # Create a radar chart for personality traits
-        trait_names = []
-        trait_scores = []
         
-        for trait in PERSONALITY_TRAITS:
-            trait_key = trait.lower()
-            if trait_key in analysis_result["traits"]:
-                trait_data = analysis_result["traits"][trait_key]
-                trait_names.append(trait)
-                # Convert score to int if it's a string
-                if isinstance(trait_data["score"], str):
-                    try:
-                        score = int(trait_data["score"])
-                    except ValueError:
-                        score = float(trait_data["score"])
-                else:
-                    score = trait_data["score"]
-                trait_scores.append(score)
+        # Disclaimer
+        st.markdown(f"<p style='font-style: italic; font-size: 0.8rem; color: #999; text-align: center; margin-top: 2rem;'>{analysis_result['disclaimer']}</p>", unsafe_allow_html=True)
         
-        # Add the first trait again to close the radar chart
-        if trait_names:  # Check if we have any trait names
-            trait_names.append(trait_names[0])
-            trait_scores.append(trait_scores[0])
+        # Reset button for trying again
+        if st.button("Submit Another Sample", use_container_width=True):
+            logger.debug("Reset button clicked, clearing session state")
+            st.session_state.analysis_result = None
+            st.session_state.captured_image = None
+            st.session_state.uploaded_file = None
+            st.session_state.camera_on = False
+            st.session_state.submitted = False
+            st.rerun()
+            
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# Only show QR code and contest info AFTER results if we have results (for mobile view)
+with contest_container:
+    if st.session_state.analysis_result is not None:
+        # Show a compact version of contest info and QR code
+        st.markdown("<hr style='margin: 2rem 0;'>", unsafe_allow_html=True)
         
-        # Create the radar chart
-        fig = go.Figure()
+        col1, col2 = st.columns([1, 1])
         
-        fig.add_trace(go.Scatterpolar(
-            r=trait_scores,
-            theta=trait_names,
-            fill='toself',
-            name='Personality Profile',
-            line_color='#4e89ae',
-            fillcolor='rgba(78, 137, 174, 0.3)'
-        ))
+        with col1:
+            # Smaller contest info
+            st.subheader("Contest Entry")
+            st.markdown("""
+            <div style="padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid #4e89ae;">
+                <p style="margin-bottom: 0.5rem;"><strong>Your submission has been entered!</strong></p>
+                <p style="font-size: 0.9rem; margin: 0;">Winners announced hourly.</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 10]
-                )
-            ),
-            showlegend=False,
-            height=350,
-            margin=dict(l=50, r=50, t=30, b=30)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Personality profile summary
-        st.markdown("<h4>Your Personality Profile</h4>", unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size: 1rem; padding: 1rem; background-color: #f5f7f9; border-radius: 8px; border-left: 3px solid #4e89ae;'>{analysis_result['profile']}</p>", unsafe_allow_html=True)
-        
-        # Display trait scores with progress bars
-        for trait in PERSONALITY_TRAITS:
-            trait_key = trait.lower()
-            if trait_key in analysis_result["traits"]:
-                trait_data = analysis_result["traits"][trait_key]
-                
-                # Convert score to int if it's a string
-                if isinstance(trait_data["score"], str):
-                    try:
-                        score = int(trait_data["score"])
-                    except ValueError:
-                        score = float(trait_data["score"])
-                else:
-                    score = trait_data["score"]
-                
-                st.markdown(f"**{trait}**: {score}/10")
-                st.progress(score / 10)
-                st.markdown(f"<p style='font-size: 0.9rem; color: #666;'>{trait_data['evidence']}</p>", unsafe_allow_html=True)
-                st.markdown("<hr style='margin: 1rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
-    
-    # Tab 2: Handwriting Features
-    with tab2:
-        # Use a grid layout for features
-        col1, col2 = st.columns(2)
-        
-        # Split features between columns
-        features = list(HANDWRITING_FEATURES.items())
-        half = len(features) // 2
-        
-        for i, (feature, feature_info) in enumerate(features):
-            feature_key = feature.lower()
-            if feature_key in analysis_result["features"]:
-                feature_data = analysis_result["features"][feature_key]
-                
-                # Add to first or second column based on index
-                with col1 if i < half else col2:
-                    st.markdown(f"""
-                    <div class='feature-card'>
-                        <strong>{feature}:</strong> {feature_data['value']}
-                        <p style='font-size: 0.9rem; color: #666;'>{feature_data['description']}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-    
-    # Sharing section
-    st.markdown("""
-    <div style="margin-top: 2rem; text-align: center;">
-        <h4>📱 Take a screenshot to share your results!</h4>
-        <p style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
-            Share your personality profile with friends or on social media with #AIHandwritingAnalyzer
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Disclaimer
-    st.markdown(f"<p style='font-style: italic; font-size: 0.8rem; color: #999; text-align: center; margin-top: 2rem;'>{analysis_result['disclaimer']}</p>", unsafe_allow_html=True)
-    
-    # Reset button for trying again
-    if st.button("Submit Another Sample", use_container_width=True):
-        logger.debug("Reset button clicked, clearing session state")
-        st.session_state.analysis_result = None
-        st.session_state.captured_image = None
-        st.session_state.uploaded_file = None
-        st.session_state.camera_on = False
-        st.session_state.submitted = False
-        st.rerun()
-        
-    st.markdown("</div>", unsafe_allow_html=True)
+        with col2:
+            # Scan QR for friends 
+            st.subheader("Share with Friends")
+            
+            # Get the URL of the current app
+            try:
+                app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+            except:
+                try:
+                    app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+                except:
+                    app_url = "https://ai-handwriting-analysis-mjh.streamlit.app"
+            
+            # Create a QR code
+            qr_base64 = generate_qr_code(app_url)
+            
+            # Display a smaller QR code
+            st.markdown(f"""
+            <div style="text-align: center;">
+                <img src="data:image/png;base64,{qr_base64}" width="100">
+                <p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
+                    Scan to share with friends
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # Minimal footer
 st.markdown("""
