@@ -478,10 +478,9 @@ with left_col:
     st.subheader("Enter Your Information")
     
     with st.form(key="user_info_form"):
-        st.markdown("<div class='user-form'>", unsafe_allow_html=True)
+        # st.markdown("<div class='user-form'>", unsafe_allow_html=True)
         user_name = st.text_input("Your Name *", value=st.session_state.user_name)
         st.markdown("<p style='font-size: 0.8rem; color: #666;'>* Required field</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
         
         submit_button = st.form_submit_button(label="Continue")
         
@@ -509,21 +508,14 @@ with left_col:
             # Camera button instead of automatic camera
             if not st.session_state.camera_on:
                 logger.debug("Camera is off, showing camera button")
-                st.markdown("""
-                <div style="text-align: center; margin: 20px 0;">
-                    <div class="camera-button" onclick="document.getElementById('camera-button').click()">
-                        <span class="camera-icon">📷</span> Take a Photo of Your Handwriting
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Hidden button to handle the click
-                if st.button("Camera", key="camera-button", help="Turn on camera"):
+                if st.button("📷 Take a Photo of Your Handwriting", key="camera-button", use_container_width=True):
+                    logger.debug("Camera button clicked, activating camera")
                     st.session_state.camera_on = True
                     st.rerun()
             else:
+                logger.debug("Camera is on, showing camera input")
                 # Camera input only shown when button is clicked
-                img_file_buffer = camera_input_live()
+                img_file_buffer = st.camera_input("Take a photo of your handwriting")
                 
                 if img_file_buffer is not None:
                     # Save the captured image
@@ -540,18 +532,14 @@ with left_col:
                     st.image(image, caption=f"Handwriting Sample: {st.session_state.user_name}", use_container_width=True)
                     
                     # Show submission success message
-                    st.markdown(f"""
-                    <div class="submission-success">
-                        <strong>Submission successful!</strong> Your handwriting has been entered into the contest.
-                        <p>Submission ID: {st.session_state.submission_id}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.success(f"Submission successful! Your handwriting has been entered into the contest. Submission ID: {st.session_state.submission_id}")
                     
                     # Auto-analyze
                     analyze_handwriting_image(io.BytesIO(bytes_data))
                 
                 # Button to cancel camera
                 if st.button("Cancel", key="cancel-camera"):
+                    logger.debug("Cancel button clicked, turning camera off")
                     st.session_state.camera_on = False
                     st.rerun()
             
@@ -624,14 +612,14 @@ with right_col:
     # Get the URL of the current app
     try:
         # For deployed app
-        app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+        app_url = st.query_params.get("url", ["http://10.212.134.54:8501"])[0]
     except:
         try:
             # Alternative method for older Streamlit versions
-            app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
+            app_url = st.experimental_get_query_params().get("url", ["http://10.212.134.54:8501"])[0]
         except:
             # Fallback to default
-            app_url = "https://ai-handwriting-analysis-mjh.streamlit.app"
+            app_url = "http://10.212.134.54:8501"
     
     # Create a QR code
     qr_base64 = generate_qr_code(app_url)
@@ -797,6 +785,7 @@ if st.session_state.analysis_result is not None:
     
     # Reset button for trying again
     if st.button("Submit Another Sample", use_container_width=True):
+        logger.debug("Reset button clicked, clearing session state")
         st.session_state.analysis_result = None
         st.session_state.captured_image = None
         st.session_state.uploaded_file = None
