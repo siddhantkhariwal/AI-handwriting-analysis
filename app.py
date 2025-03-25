@@ -624,14 +624,14 @@ with right_col:
     # Get the URL of the current app
     try:
         # For deployed app
-        app_url = st.query_params.get("url", ["http://localhost:8501"])[0]
+        app_url = st.query_params.get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
     except:
         try:
             # Alternative method for older Streamlit versions
-            app_url = st.experimental_get_query_params().get("url", ["http://localhost:8501"])[0]
+            app_url = st.experimental_get_query_params().get("url", ["https://ai-handwriting-analysis-mjh.streamlit.app"])[0]
         except:
             # Fallback to default
-            app_url = "http://localhost:8501"
+            app_url = "https://ai-handwriting-analysis-mjh.streamlit.app"
     
     # Create a QR code
     qr_base64 = generate_qr_code(app_url)
