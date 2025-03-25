@@ -11,6 +11,8 @@ from camera_input_live import camera_input_live
 import json
 import requests
 import hashlib
+import cloudinary
+import cloudinary.uploader
 # Debug imports
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -350,8 +352,6 @@ def upload_to_cloudinary(image_data, filename):
     
     try:
         # Configure Cloudinary
-        import cloudinary
-        import cloudinary.uploader
         
         cloudinary.config(
             cloud_name=CLOUDINARY_CLOUD_NAME,
@@ -628,7 +628,7 @@ with right_col:
     # Contest info
     st.subheader("Handwriting Contest")
     st.markdown("""
-    <div style="background-color: #f0f7ff; padding: 1.2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #4e89ae;">
+    <div style="padding: 1.2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #4e89ae;">
         <h4 style="margin-top: 0;">Win Prizes Every Hour!</h4>
         <p>The best handwriting submission each hour will win a special prize. Enter now for a chance to win!</p>
         <p><strong>How it works:</strong></p>
