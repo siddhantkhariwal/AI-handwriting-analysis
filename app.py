@@ -333,7 +333,6 @@ if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
 # Function to upload to Cloudinary
-# Function to upload to Cloudinary
 def upload_to_cloudinary(image_data, filename):
     """Upload image to Cloudinary and return the URL"""
     if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
@@ -350,52 +349,43 @@ def upload_to_cloudinary(image_data, filename):
         return f"Local file: {temp_path}"
     
     try:
-        # Prepare for upload
-        upload_url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+        # Configure Cloudinary
+        import cloudinary
+        import cloudinary.uploader
         
+        cloudinary.config(
+            cloud_name=CLOUDINARY_CLOUD_NAME,
+            api_key=CLOUDINARY_API_KEY,
+            api_secret=CLOUDINARY_API_SECRET
+        )
+        
+        # Prepare the file for upload
         if isinstance(image_data, bytes):
-            # If it's already bytes data
-            base64_data = base64.b64encode(image_data).decode("utf-8")
+            # If it's already bytes data, use it directly
+            file_to_upload = image_data
         else:
-            # If it's a file-like object
+            # If it's a file-like object, read it
             image_data.seek(0)
-            base64_data = base64.b64encode(image_data.read()).decode("utf-8")
+            file_to_upload = image_data.read()
         
-        # Create signature for authentication (for signed upload)
-        timestamp = int(time.time())
+        # Create public_id from filename (without extension)
+        public_id = filename.split('.')[0]
         
-        # Prepare parameters
-        params = {
-            "timestamp": timestamp,
-            "public_id": filename.split('.')[0],  # Use filename without extension as public_id
-            "tags": "handwriting_analyzer"
-        }
+        # Upload to Cloudinary with folder
+        upload_result = cloudinary.uploader.upload(
+            file_to_upload,
+            folder="handwriting_analyzer",
+            public_id=public_id,
+            resource_type="image",
+            tags=["handwriting_analyzer"]  # Tag for filtering
+        )
         
-        # Create signature
-        signature_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
-        signature_string += CLOUDINARY_API_SECRET  # Add the API secret
-        signature = hashlib.sha1(signature_string.encode()).hexdigest()
+        return upload_result.get("secure_url")
         
-        # Prepare the full request
-        data = {
-            "file": f"data:image/jpeg;base64,{base64_data}",
-            "api_key": CLOUDINARY_API_KEY,
-            "timestamp": timestamp,
-            "signature": signature,
-            "public_id": params["public_id"],
-            "tags": params["tags"]
-        }
-        
-        # Upload to Cloudinary
-        response = requests.post(upload_url, data=data)
-        
-        if response.status_code == 200:
-            result = response.json()
-            return result.get("secure_url")
-        else:
-            st.error(f"Failed to upload to Cloudinary: {response.text}")
-            return None
     except Exception as e:
+        import traceback
+        logger.error(f"Error uploading to Cloudinary: {str(e)}")
+        logger.error(traceback.format_exc())
         st.error(f"Error uploading to Cloudinary: {str(e)}")
         return None
 
